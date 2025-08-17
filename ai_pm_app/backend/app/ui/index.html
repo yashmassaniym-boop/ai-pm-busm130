@@ -1,0 +1,198 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI-Augmented PM System - Minimal UI</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 20px; line-height: 1.4; }
+    h1 { margin-bottom: 4px; }
+    h2 { margin-top: 24px; }
+    input, button, textarea { padding: 8px; font-size: 14px; }
+    .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+    .small { font-size: 12px; color: #666; }
+    pre { background: #f6f8fa; padding: 10px; border-radius: 6px; overflow: auto; }
+    .box { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 8px 0; }
+    .ok { color: #0a0; }
+    .err { color: #a00; }
+    ul { margin: 4px 0 4px 18px; }
+  </style>
+</head>
+<body>
+  <h1>AI-Augmented PM System</h1>
+  <div class="small">Minimal demo UI served from FastAPI — generate, view, preview & apply.</div>
+
+  <h2>1) Generate a new project</h2>
+  <div class="row">
+    <input id="vision" placeholder="Enter vision (e.g., Launch AI assistant)" style="min-width: 300px;" />
+    <button id="btnGen">Generate</button>
+    <span id="genMsg"></span>
+  </div>
+
+  <h2>2) Load a project</h2>
+  <div class="row">
+    <input id="projectId" placeholder="project_id" style="width: 120px;" />
+    <button id="btnLoad">Load</button>
+    <span class="small">Tip: after generating, this box is auto-filled.</span>
+  </div>
+  <div id="tree" class="box"></div>
+
+  <h2>3) Rename a Benefit → Preview suggestions → Apply</h2>
+  <div class="row">
+    <input id="benefitId" placeholder="benefit_id" style="width: 120px;" />
+    <input id="newBenefitName" placeholder="New benefit name" style="min-width: 220px;" />
+    <button id="btnPreview">Preview</button>
+    <button id="btnApply" disabled>Apply</button>
+    <span id="propMsg"></span>
+  </div>
+  <div class="box">
+    <div class="small">Preview suggestions (non-destructive):</div>
+    <pre id="suggestions">(none)</pre>
+  </div>
+
+  <script>
+    const base = location.origin; // same server
+    const el = id => document.getElementById(id);
+    let currentProjectId = null;
+    let lastSuggestions = null;
+
+    function msg(elem, text, ok=true) {
+      elem.textContent = text;
+      elem.className = ok ? "ok" : "err";
+    }
+
+    async function generateProject() {
+      const vision = el("vision").value.trim() || "Launch AI assistant for service desk";
+      el("btnGen").disabled = true;
+      msg(el("genMsg"), "Generating...", true);
+      try {
+        const r = await fetch(`${base}/projects/generate`, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ vision })
+        });
+        const j = await r.json();
+        currentProjectId = j.project_id;
+        el("projectId").value = currentProjectId;
+        msg(el("genMsg"), `Generated project_id=${currentProjectId}`, true);
+      } catch (e) {
+        msg(el("genMsg"), "Failed: " + e, false);
+      } finally {
+        el("btnGen").disabled = false;
+      }
+    }
+
+    async function loadProject() {
+      const pid = parseInt(el("projectId").value, 10);
+      if (!pid) { msg(el("genMsg"), "Enter a valid project_id", false); return; }
+      currentProjectId = pid;
+      el("tree").innerHTML = "Loading...";
+      try {
+        const r = await fetch(`${base}/projects/${pid}`);
+        const j = await r.json();
+        renderTree(j);
+        msg(el("genMsg"), `Loaded project_id=${pid}`, true);
+      } catch (e) {
+        el("tree").textContent = "Failed to load: " + e;
+        msg(el("genMsg"), "Load failed", false);
+      }
+    }
+
+    function renderTree(proj) {
+      const container = el("tree");
+      const ul = document.createElement("ul");
+      const liRoot = document.createElement("li");
+      liRoot.textContent = `Project: ${proj.name} (vision: ${proj.vision})`;
+      ul.appendChild(liRoot);
+
+      const ulO = document.createElement("ul");
+      (proj.outcomes || []).forEach(o => {
+        const lo = document.createElement("li");
+        lo.textContent = `Outcome #${o.id}: ${o.name}`;
+        const ulB = document.createElement("ul");
+        (o.benefits || []).forEach(b => {
+          const lb = document.createElement("li");
+          lb.textContent = `Benefit #${b.id}: ${b.name}`;
+          const ulD = document.createElement("ul");
+          (b.deliverables || []).forEach(d => {
+            const ld = document.createElement("li");
+            ld.textContent = `Deliverable #${d.id}: ${d.name} — ${d.description || ""}`;
+            const ulT = document.createElement("ul");
+            (d.tasks || []).forEach(t => {
+              const lt = document.createElement("li");
+              lt.textContent = `Task #${t.id}: ${t.name} (${t.est_days}d)`;
+              ulT.appendChild(lt);
+            });
+            ld.appendChild(ulT);
+            ulD.appendChild(ld);
+          });
+          lb.appendChild(ulD);
+          ulB.appendChild(lb);
+        });
+        lo.appendChild(ulB);
+        ulO.appendChild(lo);
+      });
+      liRoot.appendChild(ulO);
+
+      container.innerHTML = "";
+      container.appendChild(ul);
+    }
+
+    async function previewChange() {
+      const pid = currentProjectId || parseInt(el("projectId").value, 10);
+      const bid = parseInt(el("benefitId").value, 10);
+      const newName = el("newBenefitName").value.trim();
+      if (!pid || !bid || !newName) { msg(el("propMsg"), "Enter project_id, benefit_id, and new name", false); return; }
+      msg(el("propMsg"), "Previewing...", true);
+      el("btnPreview").disabled = true;
+      try {
+        const r = await fetch(`${base}/projects/${pid}/propagate/preview`, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            changes: [{ entity: "benefit", id: bid, field: "name", new_value: newName }]
+          })
+        });
+        const j = await r.json();
+        lastSuggestions = (j && j.suggestions) ? j.suggestions : [];
+        el("suggestions").textContent = JSON.stringify(lastSuggestions, null, 2);
+        msg(el("propMsg"), `Got ${lastSuggestions.length} suggestion(s). Click Apply to confirm.`, true);
+        el("btnApply").disabled = lastSuggestions.length === 0;
+      } catch (e) {
+        msg(el("propMsg"), "Preview failed: " + e, false);
+        el("btnApply").disabled = true;
+      } finally {
+        el("btnPreview").disabled = false;
+      }
+    }
+
+    async function applyChange() {
+      const pid = currentProjectId || parseInt(el("projectId").value, 10);
+      if (!pid || !lastSuggestions || lastSuggestions.length === 0) {
+        msg(el("propMsg"), "No suggestions to apply", false);
+        return;
+      }
+      msg(el("propMsg"), "Applying...", true);
+      el("btnApply").disabled = true;
+      try {
+        const r = await fetch(`${base}/projects/${pid}/propagate/apply`, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ ops: lastSuggestions })
+        });
+        const j = await r.json();
+        msg(el("propMsg"), `Applied ${j.applied} change(s). Reloading...`, true);
+        await loadProject();
+      } catch (e) {
+        msg(el("propMsg"), "Apply failed: " + e, false);
+      }
+    }
+
+    el("btnGen").addEventListener("click", generateProject);
+    el("btnLoad").addEventListener("click", loadProject);
+    el("btnPreview").addEventListener("click", previewChange);
+    el("btnApply").addEventListener("click", applyChange);
+  </script>
+</body>
+</html>
