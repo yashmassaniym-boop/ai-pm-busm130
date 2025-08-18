@@ -1,6 +1,6 @@
 from pathlib import Path
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 router = APIRouter()
 
@@ -10,3 +10,13 @@ def ui_page():
     # parents[1] = .../backend/app  → app/ui/index.html
     base = Path(__file__).resolve().parents[1] / "ui" / "index.html"
     return base.read_text(encoding="utf-8")
+
+@router.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page():
+    base = Path(__file__).resolve().parents[1] / "ui" / "dashboard.html"
+    return base.read_text(encoding="utf-8")
+
+
+@router.get("/", include_in_schema=False)
+def index():
+    return RedirectResponse(url="/dashboard")
