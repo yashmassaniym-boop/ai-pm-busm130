@@ -62,3 +62,27 @@ class Risk(SQLModel, table=True):
     probability: int = 2
     impact: int = 2
     mitigation: Optional[str] = None
+
+from datetime import datetime
+from typing import Optional
+
+class ActivityLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(index=True)
+    entity: str
+    entity_id: int
+    field: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+from datetime import datetime
+from typing import Optional
+
+class TaskState(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    task_id: int = Field(index=True)
+    status: str = Field(default="todo")  # todo | inprogress | done
+    done: bool = Field(default=False)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
