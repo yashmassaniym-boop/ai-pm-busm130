@@ -1,3 +1,7 @@
+import os, sys
+# ensure repo root is on import path for CI runners
+sys.path.insert(0, os.getcwd())
+
 from fastapi.testclient import TestClient
 from datetime import date
 from ai_pm_app.backend.app.main import app
@@ -19,7 +23,6 @@ def test_generate_and_endpoints():
     assert client.get(f'/projects/{pid}/risk/summary').status_code == 200
     assert client.get(f'/projects/{pid}/timeline').status_code == 200
 
-    # backlog & task updates
     back = client.get(f'/projects/{pid}/backlog').json()
     todo = back['columns']['todo']
     if todo:
