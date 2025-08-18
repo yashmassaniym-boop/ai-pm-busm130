@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI PM Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+<style>
+  body { background:#0b1020; color:#e8ebf0; }
+  .card { background:#11162a; border:1px solid #1b2140; }
+  .kpi { font-size: 1.8rem; font-weight:700; }
+  .sub { color:#9aa3b2; font-size:.9rem; }
+  .heat td { width:38px; height:30px; text-align:center; border:1px solid #1b2140; }
+  .c0{background:#0b1020;} .c1{background:#102b3f;} .c2{background:#15466a;}
+  .c3{background:#1b5e86;} .c4{background:#2179a6;} .c5{background:#2c8fc0;}
+  .kanban { display:flex; gap:12px; }
+  .kanban-col { flex:1; background:#0f1428; border:1px solid #1b2140; border-radius:8px; padding:8px; }
+  .kanban-col h6 { color:#cdd6e5; }
+  .task { background:#131a33; border:1px solid #1b2140; border-radius:8px; padding:8px; margin-bottom:8px; }
+  .task small{ color:#9aa3b2; }
+  .gantt-wrap{ background:#0f1428; border:1px solid #1b2140; border-radius:8px; padding:8px; }
+  .muted { color:#9aa3b2; }
+  a, a:hover { color:#9ad1ff; }
+</style>
+</head>
+<body>
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">AI PM Dashboard</h3>
+    <div>
+      <label class="me-2">Project ID</label>
+      <input id="pid" class="form-control d-inline-block" style="width:110px" value="">
+      <button class="btn btn-primary ms-2" onclick="loadAll()">Load</button>
+      <button class="btn btn-outline-light ms-2" onclick="gen()">Generate</button>
+    </div>
+  </div>
+
+  <div id="msg" class="mb-3 muted"></div>
+
+  <div class="row g-3">
+    <div class="col-6 col-lg-2">
+      <div class="card p-3"><div class="sub">Outcomes</div><div id="k_out" class="kpi">-</div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card p-3"><div class="sub">Benefits</div><div id="k_ben" class="kpi">-</div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card p-3"><div class="sub">Deliverables</div><div id="k_del" class="kpi">-</div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card p-3"><div class="sub">Tasks</div><div id="k_task" class="kpi">-</div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card p-3"><div class="sub">Activity</div><div id="k_act" class="kpi">-</div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+      <div class="card p-3"><div class="sub">Schema pass</div><div id="k_schema" class="kpi">-</div></div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-lg-4">
+      <div class="card p-3">
+        <div class="d-flex justify-content-between"><h6>Budget</h6><span id="budget_total" class="muted"></span></div>
+        <canvas id="budgetChart" height="220"></canvas>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card p-3">
+        <div class="d-flex justify-content-between">
+          <h6>Risk Heatmap (1–5)</h6>
+          <div>
+            <small class="me-2 muted">Count:</small><span id="risk_count">-</span>
+          </div>
+        </div>
+        <table class="heat mt-2">
+          <tbody id="riskBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <h6>Burn-down (Sprint)</h6>
+          <div>
+            <input id="sprintStart" type="date" class="form-control form-control-sm d-inline" style="width:150px">
+            <input id="sprintDays" type="number" class="form-control form-control-sm d-inline" style="width:90px" value="14">
+            <button class="btn btn-sm btn-outline-light" onclick="loadBurn()">Go</button>
+          </div>
+        </div>
+        <canvas id="burnChart" height="220"></canvas>
+        <div class="mt-2">
+          <small class="muted">Velocity:</small>
+          <canvas id="velChart" height="120"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <h6>Backlog</h6>
+          <small class="muted">Click status buttons or edit days then Save</small>
+        </div>
+        <div class="kanban mt-2">
+          <div class="kanban-col">
+            <h6>To-Do</h6>
+            <div id="col_todo"></div>
+          </div>
+          <div class="kanban-col">
+            <h6>In-Progress</h6>
+            <div id="col_inprogress"></div>
+          </div>
+          <div class="kanban-col">
+            <h6>Done</h6>
+            <div id="col_done"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <h6>Gantt</h6>
+          <div>
+            <input id="tlStart" type="date" class="form-control form-control-sm d-inline" style="width:150px">
+            <button class="btn btn-sm btn-outline-light" onclick="loadTimeline()">Refresh</button>
+          </div>
+        </div>
+        <div class="gantt-wrap mt-2"><svg id="gantt"></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3 muted">PRINCE2 Agile alignment: backlog with statuses, sprint burn-down & velocity, cadence via sprint controls, change logging via ActivityLog.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+<script>
+const base = location.origin; // same origin as API
+let PID = "";
+let budgetChart, burnChart, velChart, gantt;
+
+function el(id){ return document.getElementById(id); }
+function msg(t){ el("msg").textContent = t; }
+
+async function api(path){
+  const r = await fetch(`${base}${path}`);
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function apiPatch(path, body){
+  const r = await fetch(`${base}${path}`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  if(!r.ok) throw new Error(`PATCH ${r.status}`);
+  return r.json();
+}
+async function gen(){
+  const r = await fetch(`${base}/projects/generate`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({vision:"Use AI to improve customer support"})});
+  const j = await r.json(); PID = j.project_id; el("pid").value = PID; msg(`Generated project_id=${PID}`); await loadAll();
+}
+async function loadAll(){
+  PID = el("pid").value.trim();
+  if(!PID) { msg("Enter Project ID"); return; }
+  await Promise.all([loadKPIs(), loadBudget(), loadRisk(), loadBurn(), loadBacklog(), loadTimeline()]);
+}
+
+async function loadKPIs(){
+  const j = await api(`/projects/${PID}/kpis`);
+  el("k_out").textContent = j.counts.outcomes;
+  el("k_ben").textContent = j.counts.benefits;
+  el("k_del").textContent = j.counts.deliverables;
+  el("k_task").textContent = j.counts.tasks;
+  el("k_act").textContent = j.activity_applied;
+  el("k_schema").textContent = (j.schema_pass_rate*100).toFixed(0)+"%";
+}
+
+async function loadBudget(){
+  const j = await api(`/projects/${PID}/budget/summary`);
+  el("budget_total").textContent = "Total £" + j.total;
+  const labels = Object.keys(j.by_category), data = Object.values(j.by_category);
+  const ctx = el("budgetChart").getContext("2d");
+  if(budgetChart) budgetChart.destroy();
+  budgetChart = new Chart(ctx, { type:"pie", data:{ labels, datasets:[{ data }] }, options:{ plugins:{ legend:{ labels:{ color:"#e8ebf0"} } } } });
+}
+
+async function loadRisk(){
+  const j = await api(`/projects/${PID}/risk/summary`);
+  el("risk_count").textContent = j.count;
+  const tb = el("riskBody"); tb.innerHTML = "";
+  for(let p=5; p>=1; p--){
+    const tr = document.createElement("tr");
+    for(let i=1;i<=5;i++){
+      const v = (j.matrix[p] && j.matrix[p][i]) || 0;
+      const td = document.createElement("td");
+      td.className = "c"+Math.min(5, v);
+      td.title = `P${p}×I${i}: ${v}`;
+      td.textContent = v? v : "";
+      tr.appendChild(td);
+    }
+    tb.appendChild(tr);
+  }
+}
+
+async function loadBacklog(){
+  const j = await api(`/projects/${PID}/backlog`);
+  const cols = j.columns;
+  ["todo","inprogress","done"].forEach(s => {
+    const c = el("col_"+s); c.innerHTML = "";
+    cols[s].forEach(t => {
+      const div = document.createElement("div");
+      div.className = "task";
+      div.innerHTML = `
+        <div class="d-flex justify-content-between"><strong>${t.task}</strong><small>${t.deliverable}</small></div>
+        <div class="d-flex align-items-center mt-2">
+          <small class="me-2 muted">days</small>
+          <input type="number" min="1" value="${t.est_days}" style="width:80px" class="form-control form-control-sm me-2" id="d_${t.task_id}">
+          <button class="btn btn-sm btn-outline-light me-2" onclick="saveDays(${t.task_id})">Save</button>
+          <div class="ms-auto">
+            ${s!=="todo"? `<button class="btn btn-sm btn-outline-light me-1" onclick="setStatus(${t.task_id},'todo')">To-Do</button>`:""}
+            ${s!=="inprogress"? `<button class="btn btn-sm btn-outline-light me-1" onclick="setStatus(${t.task_id},'inprogress')">In-Progress</button>`:""}
+            ${s!=="done"? `<button class="btn btn-sm btn-outline-light" onclick="setStatus(${t.task_id},'done')">Done</button>`:""}
+          </div>
+        </div>`;
+      c.appendChild(div);
+    });
+  });
+}
+
+async function saveDays(id){
+  const v = parseInt(el("d_"+id).value, 10);
+  await apiPatch(`/tasks/${id}`, { est_days: v });
+  await Promise.all([loadBacklog(), loadBurn(), loadTimeline(), loadKPIs()]);
+}
+
+async function setStatus(id, s){
+  await apiPatch(`/tasks/${id}`, { status: s, done: s==="done" });
+  await Promise.all([loadBacklog(), loadBurn(), loadKPIs()]);
+}
+
+async function loadBurn(){
+  const s = el("sprintStart").value || "";
+  const d = parseInt(el("sprintDays").value || "14", 10);
+  const j = await api(`/projects/${PID}/burn?sprint_days=${d}${s?`&start=${s}`:""}`);
+  const ctx = el("burnChart").getContext("2d");
+  if(burnChart) burnChart.destroy();
+  burnChart = new Chart(ctx, {
+    type:"line",
+    data:{ labels: j.labels, datasets:[
+      { label:"Ideal", data:j.ideal, fill:false, tension:0.2 },
+      { label:"Actual", data:j.actual, fill:false, tension:0.2 }
+    ]},
+    options:{ plugins:{ legend:{ labels:{ color:"#e8ebf0"} } }, scales:{ x:{ ticks:{ color:"#e8ebf0"} }, y:{ ticks:{ color:"#e8ebf0"} } } }
+  });
+
+  const v = await api(`/projects/${PID}/velocity?sprint_days=${d}${s?`&start=${s}`:""}`);
+  const vctx = el("velChart").getContext("2d");
+  if(velChart) velChart.destroy();
+  velChart = new Chart(vctx, { type:"bar", data:{ labels:v.labels, datasets:[{ label:"Velocity (pts)", data:v.velocity }] },
+    options:{ plugins:{ legend:{ labels:{ color:"#e8ebf0"} } }, scales:{ x:{ ticks:{ color:"#e8ebf0"} }, y:{ ticks:{ color:"#e8ebf0"} } } } });
+}
+
+async function loadTimeline(){
+  const s = el("tlStart").value || "";
+  const j = await api(`/projects/${PID}/timeline${s?`?start=${s}`:""}`);
+  const items = j.items.map(x => ({
+    id: "t"+x.task_id, name: x.task, start: x.start, end: x.end, progress: 0, custom_class:""
+  }));
+  const elem = document.querySelector("#gantt");
+  elem.innerHTML = "";
+  gantt = new Gantt(elem, items, { view_mode: "Day" });
+}
+
+</script>
+</body>
+</html>
