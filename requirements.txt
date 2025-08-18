@@ -3,3 +3,4 @@ uvicorn>=0.29
 sqlmodel>=0.0.21
 pydantic>=2.6
 requests>=2.31
+httpx>=0.24,<1.0
